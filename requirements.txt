@@ -1,0 +1,7 @@
+spotipy
+librosa
+essentia
+pandas
+numpy
+yt-dlp
+python-dotenv

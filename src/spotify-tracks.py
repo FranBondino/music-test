@@ -1,14 +1,23 @@
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
+from dotenv import load_dotenv
+import os
 
-# Spotify API credentials (replace with your own from developer.spotify.com)
-client_id = "your_client_id_here"
-client_secret = "your_client_secret_here"
+# Load environment variables from .env
+load_dotenv()
+
+# Spotify API credentials from .env
+client_id = os.getenv("SPOTIFY_CLIENT_ID")
+client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+
+if not client_id or not client_secret:
+    raise ValueError("Spotify credentials not found in .env file.")
+
 client_credentials_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
 sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
 
-# Search for a melodic techno playlist (e.g., "Melodic Techno Top")
+# Search for a melodic techno playlist
 def get_playlist_tracks(query="Melodic Techno Top", limit=50):
     results = sp.search(q=query, type="playlist", limit=1)
     if not results["playlists"]["items"]:
@@ -25,7 +34,7 @@ def get_playlist_tracks(query="Melodic Techno Top", limit=50):
         results = sp.playlist_tracks(playlist_id, offset=offset, limit=100)
         for item in results["items"]:
             track = item["track"]
-            if track:  # Skip null entries
+            if track:
                 tracks.append({
                     "name": track["name"],
                     "artist": track["artists"][0]["name"],
@@ -41,10 +50,10 @@ def get_playlist_tracks(query="Melodic Techno Top", limit=50):
 # Main execution
 if __name__ == "__main__":
     try:
-        tracks = get_playlist_tracks(limit=50)  # Top 50 tracks
+        tracks = get_playlist_tracks(limit=50)
         df = pd.DataFrame(tracks)
-        df.to_csv("data/spotify_melodic_techno_tracks.csv", index=False)
-        print(f"Saved {len(tracks)} tracks to data/spotify_melodic_techno_tracks.csv")
+        df.to_csv("data/spotify_melic_techno_tracks.csv", index=False)
+        print(f"Saved {len(tracks)} tracks to data/spotify_melic_techno_tracks.csv")
         print(df.head())
     except Exception as e:
         print(f"Error: {e}")

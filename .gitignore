@@ -1,1 +1,5 @@
 venv/
+.env
+*.mp3
+__pycache__/
+data/*.csv  
