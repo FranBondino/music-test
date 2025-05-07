@@ -7,7 +7,6 @@ import time
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-import plotly.express as px
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
@@ -123,40 +122,31 @@ if track_data:
     features = ["Tempo", "Energy", "Danceability", "Valence_Proxy"]
     X = df[features]
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)  # Fix: Use fit_transform instead of fit_predict
+    X_scaled = scaler.fit_transform(X)
     kmeans = KMeans(n_clusters=3, random_state=42)
     df["Cluster"] = kmeans.fit_predict(X_scaled)
 
-    # Visualization 1: Pair Plot with Seaborn
-    plt.figure(figsize=(10, 8))
-    sns.pairplot(
-        df,
-        vars=features,
-        hue="Mood",
-        palette="Set2",
-        diag_kind="hist",
-        plot_kws={"alpha": 0.6, "s": 80}
-    )
-    plt.suptitle("Feature Relationships by Mood and Cluster", y=1.02)
-    plt.savefig("data/melic_techno_pairplot.png")
-    print("Saved pair plot to data/melic_techno_pairplot.png")
-
-    # Visualization 2: Interactive Scatter Plot with Plotly
-    fig = px.scatter(
-        df,
+    # Visualization 1: Scatter Plot with Seaborn
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(
+        data=df,
         x="Danceability",
         y="Energy",
-        color="Mood",
+        hue="Mood",
         size="Valence_Proxy",
-        hover_data=["Name", "Artist"],
-        title="Melodic Techno Tracks: Energy vs Danceability",
-        labels={"Danceability": "Danceability", "Energy": "Energy"},
-        color_discrete_sequence=px.colors.qualitative.Set2
+        palette="Set2",
+        alpha=0.7,
+        sizes=(20, 200)
     )
-    fig.write_html("data/melic_techno_scatter.html")
-    print("Saved interactive scatter plot to data/melic_techno_scatter.html")
+    plt.title("Melodic Techno Tracks: Energy vs Danceability")
+    plt.xlabel("Danceability")
+    plt.ylabel("Energy")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.tight_layout()
+    plt.savefig("data/melic_techno_scatter.png")
+    print("Saved scatter plot to data/melic_techno_scatter.png")
 
-    # Visualization 3: Violin Plot with Seaborn and Swarm
+    # Visualization 2: Violin Plot with Seaborn and Swarm
     plt.figure(figsize=(12, 6))
     plt.subplot(1, 2, 1)
     sns.violinplot(x="Mood", y="Energy", data=df, palette="Set2")
@@ -170,21 +160,13 @@ if track_data:
     plt.savefig("data/melic_techno_violinplot.png")
     print("Saved violin plot to data/melic_techno_violinplot.png")
 
-    # Visualization 4: 3D Scatter Plot with Plotly
-    fig_3d = px.scatter_3d(
-        df,
-        x="Energy",
-        y="Danceability",
-        z="Valence_Proxy",
-        color="Mood",
-        size="Tempo",
-        hover_data=["Name", "Artist"],
-        title="Melodic Techno Tracks: 3D Feature Space",
-        labels={"Energy": "Energy", "Danceability": "Danceability", "Valence_Proxy": "Valence"},
-        color_discrete_sequence=px.colors.qualitative.Set2
-    )
-    fig_3d.write_html("data/melic_techno_3d_scatter.html")
-    print("Saved 3D scatter plot to data/melic_techno_3d_scatter.html")
+    # Visualization 3: Heatmap of Feature Correlations
+    correlation_matrix = df[features].corr()
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", vmin=-1, vmax=1, center=0, square=True, fmt=".2f")
+    plt.title("Correlation Matrix of Melodic Techno Features")
+    plt.savefig("data/melic_techno_heatmap.png")
+    print("Saved correlation heatmap to data/melic_techno_heatmap.png")
 
 else:
     print("No tracks processed successfully.")
