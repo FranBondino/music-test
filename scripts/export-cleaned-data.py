@@ -74,7 +74,7 @@ try:
     conn = psycopg2.connect(**db_params)
     cursor = conn.cursor()
 
-    # Create tracks table
+    # Create tracks table with Mood column only
     create_table_query = """
     CREATE TABLE IF NOT EXISTS tracks (
         name VARCHAR(255),
@@ -83,7 +83,8 @@ try:
         tempo FLOAT,
         energy FLOAT,
         danceability FLOAT,
-        valence_proxy FLOAT
+        valence_proxy FLOAT,
+        mood VARCHAR(50)
     );
     """
     cursor.execute(create_table_query)
@@ -100,16 +101,23 @@ try:
             else:
                 break
 
+    # Load the CSV into a DataFrame and normalize column names to lowercase
+    print(f"Loading {temp_csv} into DataFrame...")
+    df = pd.read_csv(temp_csv, encoding='utf-8')
+    # Convert column names to lowercase to match table schema
+    df.columns = df.columns.str.lower()
+
     # Try importing with copy_expert
     print(f"Attempting to import data from {temp_csv}")
     try:
+        # Save the modified DataFrame back to temp_csv with lowercase column names
+        df.to_csv(temp_csv, index=False, encoding='utf-8')
         with open(temp_csv, 'r', encoding='utf-8') as f:
             cursor.copy_expert("COPY tracks FROM STDIN WITH CSV HEADER DELIMITER ','", f)
     except psycopg2.Error as e:
         print(f"copy_expert failed: {e}")
         print("Falling back to pandas.to_sql import...")
-        # Fallback to pandas.to_sql
-        df = pd.read_csv(temp_csv, encoding='utf-8')
+        # Fallback to pandas.to_sql (columns are already lowercase)
         engine = create_engine(f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['dbname']}")
         df.to_sql('tracks', engine, if_exists='append', index=False)
         print("Data imported using pandas.to_sql")
@@ -125,11 +133,21 @@ try:
             GROUP BY name, artist
         );
         """,
-        # Handle missing values (using dataset means)
+        # Handle missing values (using dataset means and defaults for Mood)
         """
         UPDATE tracks 
-        SET tempo = 125, energy = 0.347, danceability = 0.560, valence_proxy = 0.735 
-        WHERE tempo IS NULL OR energy IS NULL OR danceability IS NULL OR valence_proxy IS NULL;
+        SET 
+            tempo = 125, 
+            energy = 0.347, 
+            danceability = 0.560, 
+            valence_proxy = 0.735,
+            mood = 'Neutral'  -- Default mood
+        WHERE 
+            tempo IS NULL OR 
+            energy IS NULL OR 
+            danceability IS NULL OR 
+            valence_proxy IS NULL OR 
+            mood IS NULL;
         """,
         # Fix tempo range
         """
@@ -139,13 +157,19 @@ try:
             WHEN tempo > 140 THEN 140 
             ELSE tempo 
         END;
+        """,
+        # Ensure Mood values are valid
+        """
+        UPDATE tracks 
+        SET mood = 'Neutral'
+        WHERE mood NOT IN ('Happy', 'Neutral', 'Energetic', 'Calm');
         """
     ]
     print("Cleaning data...")
     for query in cleaning_queries:
         cursor.execute(query)
 
-    # Analysis queries (store results for logging)
+    # Analysis queries (updated to remove Cluster references)
     analysis_queries = {
         "Q1_Averages": """
         SELECT 
@@ -155,8 +179,15 @@ try:
             ROUND(AVG(valence_proxy)::numeric, 3) AS avg_valence
         FROM tracks;
         """,
-        "Q2_Bangers": """
-        SELECT name, artist, tempo, energy, danceability, valence_proxy
+        "Q2_Bangers_By_Mood": """
+        SELECT 
+            name, 
+            artist, 
+            tempo, 
+            energy, 
+            danceability, 
+            valence_proxy, 
+            mood
         FROM tracks
         WHERE energy > 0.347 AND danceability > 0.560
         ORDER BY energy DESC, danceability DESC
@@ -166,7 +197,8 @@ try:
         SELECT 
             ROUND(tempo::numeric) AS tempo_bucket,
             COUNT(*) AS track_count,
-            ROUND(AVG(danceability)::numeric, 3) AS avg_danceability
+            ROUND(AVG(danceability)::numeric, 3) AS avg_danceability,
+            STRING_AGG(mood, ', ') AS moods
         FROM tracks
         GROUP BY ROUND(tempo::numeric)
         ORDER BY tempo_bucket;
@@ -175,7 +207,8 @@ try:
         SELECT 
             artist,
             COUNT(*) AS track_count,
-            ROUND(AVG(energy)::numeric, 3) AS avg_energy
+            ROUND(AVG(energy)::numeric, 3) AS avg_energy,
+            STRING_AGG(DISTINCT mood, ', ') AS moods
         FROM tracks
         WHERE energy > 0.347
         GROUP BY artist
@@ -190,17 +223,37 @@ try:
                 ELSE 'Fast (127-140)'
             END AS tempo_range,
             COUNT(*) AS track_count,
-            ROUND(AVG(energy)::numeric, 3) AS avg_energy
+            ROUND(AVG(energy)::numeric, 3) AS avg_energy,
+            STRING_AGG(DISTINCT mood, ', ') AS moods
         FROM tracks
         GROUP BY tempo_range
         ORDER BY tempo_range;
         """,
         "Q6_Outliers": """
-        SELECT name, artist, tempo, energy, danceability, valence_proxy
+        SELECT 
+            name, 
+            artist, 
+            tempo, 
+            energy, 
+            danceability, 
+            valence_proxy, 
+            mood
         FROM tracks
-        WHERE energy > (SELECT AVG(energy) + 2 * STDDEV(energy) FROM tracks)
-           OR danceability > (SELECT AVG(danceability) + 2 * STDDEV(danceability) FROM tracks)
+        WHERE 
+            energy > (SELECT AVG(energy) + 2 * STDDEV(energy) FROM tracks)
+            OR danceability > (SELECT AVG(danceability) + 2 * STDDEV(danceability) FROM tracks)
         LIMIT 5;
+        """,
+        "Q7_Mood_Distribution": """
+        SELECT 
+            mood,
+            COUNT(*) AS track_count,
+            ROUND(AVG(energy)::numeric, 3) AS avg_energy,
+            ROUND(AVG(danceability)::numeric, 3) AS avg_danceability,
+            ROUND(AVG(valence_proxy)::numeric, 3) AS avg_valence
+        FROM tracks
+        GROUP BY mood
+        ORDER BY track_count DESC;
         """
     }
 
